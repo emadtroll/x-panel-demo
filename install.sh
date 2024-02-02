@@ -183,6 +183,49 @@ userINPU() {
   if [[ -n "${passwordtmp}" ]]; then
     adminpassword=${passwordtmp}
   fi
+
+  # Random port number generator to prevent xpanel detection by potential attackers
+  randomPort=""
+  # Check if $RANDOM is available in the shell
+  if [ -z "$RANDOM" ]; then
+    # If $RANDOM is not available, use a different random number generation method
+    random_number=$(od -A n -t d -N 2 /dev/urandom | tr -d ' ')
+  else
+    # Generate a random number between 0 and 63000 using $RANDOM
+    random_number=$((RANDOM % 63001))
+  fi
+
+  # Add 2000 to the random number to get a range between 2000 and 65000
+  randomPort=$((random_number + 2000))
+
+  # Use port 8081 if the random_number is zero (in case $RANDOM was not available and port 8081 was chosen)
+  if [ "$random_number" -eq 0 ]; then
+    randomPort=8081
+  fi
+
+  echo -e "\nPlease input Panel admin Port, or leave blank to use randomly generated port"
+  printf "Random port \033[33m$randomPort:\033[0m "
+  read porttmp
+  if [[ -n "${porttmp}" ]]; then
+    #Get the server port number from my settings file
+    serverPort=${porttmp}
+    serverPortssl=$((serverPort + 1))
+    echo $serverPort
+  else
+    serverPort=$randomPort
+    serverPortssl=$((serverPort + 1))
+    echo $serverPort
+  fi
+  if [ "$dmssl" == "True" ]; then
+    sshttp=$((serverPort + 1))
+  else
+    sshttp=$serverPort
+  fi
+  udpport=7300
+
+  echo -e "\nPlease input UDPGW Port ."
+  printf "Default Port is \e[33m${udpport}\e[0m, let it blank to use this Port: "
+  read udpport
 }
 startINSTALL() {
   if [ "$dmp" != "" ]; then
@@ -345,47 +388,6 @@ EOF
     wait
     clear
 
-    # Random port number generator to prevent xpanel detection by potential attackers
-    randomPort=""
-    # Check if $RANDOM is available in the shell
-    if [ -z "$RANDOM" ]; then
-      # If $RANDOM is not available, use a different random number generation method
-      random_number=$(od -A n -t d -N 2 /dev/urandom | tr -d ' ')
-    else
-      # Generate a random number between 0 and 63000 using $RANDOM
-      random_number=$((RANDOM % 63001))
-    fi
-
-    # Add 2000 to the random number to get a range between 2000 and 65000
-    randomPort=$((random_number + 2000))
-
-    # Use port 8081 if the random_number is zero (in case $RANDOM was not available and port 8081 was chosen)
-    if [ "$random_number" -eq 0 ]; then
-      randomPort=8081
-    fi
-
-    echo -e "\nPlease input Panel admin Port, or leave blank to use randomly generated port"
-    printf "Random port \033[33m$randomPort:\033[0m "
-    read porttmp
-    if [[ -n "${porttmp}" ]]; then
-      #Get the server port number from my settings file
-      serverPort=${porttmp}
-      serverPortssl=$((serverPort + 1))
-      echo $serverPort
-    else
-      serverPort=$randomPort
-      serverPortssl=$((serverPort + 1))
-      echo $serverPort
-    fi
-    if [ "$dmssl" == "True" ]; then
-      sshttp=$((serverPort + 1))
-    else
-      sshttp=$serverPort
-    fi
-    udpport=7300
-    echo -e "\nPlease input UDPGW Port ."
-    printf "Default Port is \e[33m${udpport}\e[0m, let it blank to use this Port: "
-    read udpport
     sudo bash -c "$(curl -Ls https://raw.githubusercontent.com/xpanel-cp/Nethogs-Json-main/master/install.sh --ipv4)"
     git clone https://github.com/ambrop72/badvpn.git /root/badvpn
     mkdir /root/badvpn/badvpn-build
@@ -629,7 +631,7 @@ checkDATABASE() {
   wait
   sed -i "s/DB_USERNAME=.*/DB_USERNAME=$adminusername/g" /var/www/html/app/.env
   sed -i "s/DB_PASSWORD=.*/DB_PASSWORD=$adminpassword/g" /var/www/html/app/.env
-  cd /var/www/html/app
+  cd /var/www/html/app || exit
   php artisan migrate
   if [ -n "$adminuser" -a "$adminuser" != "NULL" ]; then
     mysql -e "USE XPanel_plus; UPDATE admins SET username = '${adminusername}' where permission='admin';"
